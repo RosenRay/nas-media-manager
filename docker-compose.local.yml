@@ -1,0 +1,14 @@
+services:
+  nas-media-manager:
+    build: .
+    image: nas-media-manager:local
+    container_name: nas-media-manager-local
+    restart: unless-stopped
+    ports:
+      - "18765:8000"
+    environment:
+      MEDIA_ROOT: /media
+      DATA_ROOT: /data
+    volumes:
+      - /volume1/video:/media
+      - ./data:/data
