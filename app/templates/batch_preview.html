@@ -22,16 +22,16 @@
 <section class="card flush">
   <div class="section-title padded"><h2>待生成集合</h2><span class="hint">底层继续使用绿联兼容的 Season 01 结构。</span></div>
   <div class="table-wrap">
-    <table>
+    <table class="mobile-preview-table">
       <thead><tr><th>源文件夹</th><th>集合名称</th><th>视频数</th><th>目标目录</th><th>状态</th></tr></thead>
       <tbody>
       {% for item in plan["items"] %}
         <tr>
-          <td>{{ item.folder }}</td>
-          <td>{{ item.series_title }}</td>
-          <td>{{ item.video_count }}</td>
-          <td>{{ item.collection_dir }}</td>
-          <td>{% if item.conflicts %}<span class="danger-text">冲突：{{ item.conflicts|join('；') }}</span>{% else %}可执行{% endif %}</td>
+          <td data-label="源文件夹">{{ item.folder }}</td>
+          <td data-label="集合名称">{{ item.series_title }}</td>
+          <td data-label="视频数">{{ item.video_count }}</td>
+          <td data-label="目标目录">{{ item.collection_dir }}</td>
+          <td data-label="状态">{% if item.conflicts %}<span class="danger-text">冲突：{{ item.conflicts|join('；') }}</span>{% else %}可执行{% endif %}</td>
         </tr>
       {% else %}<tr><td colspan="5" class="empty">没有可生成的集合。</td></tr>{% endfor %}
       </tbody>
