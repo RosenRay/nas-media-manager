@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}媒体文件 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">MEDIA BROWSER</div><h1>选择要整理的视频</h1></div>
+  <div class="path-chip">/{{ current }}</div>
+</div>
+{% if request.query_params.get('error') == 'no-selection' %}<div class="alert danger">请至少选择一个视频。</div>{% endif %}
+<section class="card flush">
+  <form method="post" action="/drafts/create" id="media-form">
+    <div class="toolbar">
+      {% if current %}<a class="btn ghost" href="/browse?path={{ parent|urlquote }}">← 上一级</a>{% endif %}
+      <div class="select-tools">
+        <label class="select-all"><input type="checkbox" id="select-all"> <span>全选当前目录视频</span></label>
+        <button class="btn ghost compact" type="button" id="clear-selection">取消全选</button>
+        <span class="selection-count">已选择 <strong id="selected-count">0</strong> / <span id="video-count">0</span> 个视频</span>
+      </div>
+      <button class="btn primary" type="submit">创建视频集合</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th class="check"></th><th>名称</th><th>时长</th><th>分辨率</th><th>编码</th><th>大小</th><th>修改时间</th></tr></thead>
+        <tbody>
+        {% for e in entries %}
+          <tr>
+            <td class="check">{% if e.is_video %}<input class="video-checkbox" type="checkbox" name="selected" value="{{ e.rel_path }}">{% endif %}</td>
+            <td>
+              {% if e.is_dir %}<a class="file-name folder" href="/browse?path={{ e.rel_path|urlquote }}">📁 {{ e.name }}</a>
+              {% elif e.is_video %}<span class="file-name">🎞 {{ e.name }}</span>
+              {% else %}<span class="file-name muted">{{ e.name }}</span>{% endif %}
+            </td>
+            <td>{{ e.duration_text }}</td><td>{{ e.resolution }}</td><td>{{ e.codec }}</td><td>{{ e.size_text }}</td><td>{{ e.mtime }}</td>
+          </tr>
+        {% else %}<tr><td colspan="7" class="empty">这个目录是空的。</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+</section>
+<script>
+(() => {
+  const items = [...document.querySelectorAll('.video-checkbox')];
+  const all = document.getElementById('select-all');
+  const clear = document.getElementById('clear-selection');
+  const selectedCount = document.getElementById('selected-count');
+  const videoCount = document.getElementById('video-count');
+  videoCount.textContent = items.length;
+  function refresh() {
+    const count = items.filter(x => x.checked).length;
+    selectedCount.textContent = count;
+    all.checked = items.length > 0 && count === items.length;
+    all.indeterminate = count > 0 && count < items.length;
+  }
+  all.addEventListener('change', () => { items.forEach(x => x.checked = all.checked); refresh(); });
+  clear.addEventListener('click', () => { items.forEach(x => x.checked = false); refresh(); });
+  items.forEach(x => x.addEventListener('change', refresh));
+  refresh();
+})();
+</script>
+{% endblock %}
