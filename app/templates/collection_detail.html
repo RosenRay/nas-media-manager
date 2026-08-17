@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ collection.title }} · 集合维护{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">COLLECTION MAINTENANCE</div><h1>{{ collection.title }}</h1><div class="muted path-inline">/{{ collection.path }}</div></div>
+  <div class="head-actions"><a class="btn ghost" href="/collections">返回集合列表</a><a class="btn primary" href="/collection/add?collection={{ collection.path|urlquote }}">增量添加视频</a></div>
+</div>
+<div class="stats four">
+  <div><strong>{{ collection.episode_count }}</strong><span>单集</span></div>
+  <div><strong>{{ collection.issue_count }}</strong><span>完整性问题</span></div>
+  <div><strong>{% if collection.poster_exists %}✓{% else %}—{% endif %}</strong><span>总海报</span></div>
+  <div><strong>{% if collection.fanart_exists %}✓{% else %}—{% endif %}</strong><span>背景图</span></div>
+</div>
+
+{% if collection.issues %}
+<section class="card">
+  <div class="section-title"><h2>完整性检查</h2><span class="badge failed">{{ collection.issue_count }} 项</span></div>
+  <div class="issue-list">
+  {% for issue in collection.issues %}<div class="issue-item"><code>{{ issue.code }}</code><span>{{ issue.message }}</span></div>{% endfor %}
+  </div>
+  <form method="post" action="/collection/repair" class="repair-box">
+    <input type="hidden" name="path" value="{{ collection.path }}">
+    <strong>快速修复</strong>
+    <label><input type="checkbox" name="repair_tvshow" value="1"> 补齐缺失的 tvshow.nfo</label>
+    <label><input type="checkbox" name="repair_episode_nfo" value="1" checked> 补齐缺失的单集 NFO</label>
+    <label><input type="checkbox" name="repair_episode_thumbs" value="1" checked> 为缺失的单集 JPG 自动截取中间帧</label>
+    <button class="btn ghost" type="submit">执行所选修复</button>
+  </form>
+</section>
+{% else %}
+<div class="alert success">完整性检查通过：当前集合未发现缺失 NFO、单集图片、断号或重复集数。</div>
+{% endif %}
+
+<section class="card">
+  <div class="section-title"><h2>集合信息</h2><span class="hint">修改后会重写 tvshow.nfo，并同步已有单集 NFO 的 showtitle；任务记录可撤销。</span></div>
+  <form method="post" action="/collection/update">
+    <input type="hidden" name="path" value="{{ collection.path }}">
+    <div class="form-grid two">
+      <label>集合名称<input name="title" value="{{ collection.title }}" required></label>
+      <label>年份<input name="year" value="{{ collection.year }}" placeholder="2026"></label>
+      <label class="span-2">类型 / Genre<input name="genres" value="{{ collection.genres }}" placeholder="家庭影像, 旅行"></label>
+      <label class="span-2">集合简介<textarea name="plot" rows="3">{{ collection.plot }}</textarea></label>
+    </div>
+    <div class="inline-actions"><button class="btn primary" type="submit">保存集合信息</button></div>
+  </form>
+</section>
+
+<div class="section-title standalone"><h2>单集维护</h2><span class="hint">修改标题/简介/日期只更新对应 NFO，不会改视频文件名。</span></div>
+{% for ep in collection.episodes %}
+<section class="card episode-maintenance">
+  <div class="episode-head">
+    <div><span class="episode-no">E{{ "%02d"|format(ep.episode) }}</span><strong>{{ ep.filename }}</strong></div>
+    <span class="muted">{{ ep.duration_text }} · {{ ep.resolution }}</span>
+  </div>
+  <div class="episode-status">
+    <span class="mini-status {% if ep.nfo_exists %}ok{% else %}missing{% endif %}">NFO {% if ep.nfo_exists %}✓{% else %}缺失{% endif %}</span>
+    <span class="mini-status {% if ep.thumb_exists %}ok{% else %}missing{% endif %}">JPG {% if ep.thumb_exists %}✓{% else %}缺失{% endif %}</span>
+  </div>
+  <form method="post" action="/collection/episode/update">
+    <input type="hidden" name="path" value="{{ collection.path }}">
+    <input type="hidden" name="video" value="{{ ep.video }}">
+    <div class="form-grid ep-grid">
+      <label>标题<input name="title" value="{{ ep.title }}" required></label>
+      <label>日期<input name="aired" value="{{ ep.aired }}" placeholder="2026-08-17"></label>
+      <label class="span-all">简介<textarea name="plot" rows="2">{{ ep.plot }}</textarea></label>
+    </div>
+    <div class="inline-actions"><button class="btn ghost" type="submit">保存此集 NFO</button></div>
+  </form>
+</section>
+{% else %}
+<div class="empty">集合中没有识别到 SxxExx 视频。</div>
+{% endfor %}
+{% endblock %}
