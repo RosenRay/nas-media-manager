@@ -2,8 +2,8 @@
 
 面向 NAS 私人视频的本地媒体整理与 NFO 元数据管理工具。
 
-当前版本：**v0.1.5**  
-当前重点：**绿联 NAS / UGOS Pro + 影视中心兼容输出 + 家庭影像批量整理**
+当前版本：**v0.1.6**  
+当前重点：**绿联 NAS / UGOS Pro + 手机优先的家庭影像整理体验**
 
 > 当前阶段不接入 AI，也不处理电脑本地文件。工具只操作 Docker 映射到 `/media` 的 NAS 文件，优先把“扫描 → 整理 → NFO / 图片生成 → 绿联影视中心识别”这条基础链路做稳定。
 
@@ -26,6 +26,21 @@ NAS 原始视频
     ↓
 形成集合 / 单集预览页面
 ```
+
+## v0.1.6 移动端体验
+
+v0.1.6 将 360～430px Android 竖屏作为主要适配目标，同时保留桌面端宽屏体验：
+
+- 手机端新增固定底部导航：媒体 / 集合 / 任务。
+- 媒体文件与增量添加页面由宽表格转换为触控友好的文件卡片。
+- 视频和可批量处理文件夹支持点击整行切换勾选状态。
+- 文件选择操作栏固定在底部导航上方，滚动长目录时仍可查看选择数量并继续操作。
+- 表单在窄屏自动收敛为单列，输入框使用适合移动浏览器的字号和触控高度。
+- Episode、集合维护、完整性修复按钮扩大触控区域。
+- 5 张截图候选在手机上使用横向滑动，不再压缩成狭窄的多列网格。
+- 执行预览中的“原文件 → 整理后”在手机端改为上下排列，避免长路径横向滚动。
+- 批量集合预览在手机上转换为纵向信息卡片。
+- 支持 `safe-area-inset-bottom`，避免底部导航和操作按钮被全面屏手势区域遮挡。
 
 ## 当前能力
 
@@ -114,28 +129,18 @@ NAS 原始视频
 
 ## Docker 镜像发布
 
-仓库采用 GitHub Actions 自动发布 Docker 镜像。`main` 分支提交后：
-
-```text
-pytest
-  ↓ 通过
-构建 linux/amd64 + linux/arm64
-  ↓
-推送 GitHub Container Registry
-```
+仓库采用 GitHub Actions 自动发布 Docker 镜像。`main` 分支提交后先执行 pytest，测试通过后构建 `linux/amd64 + linux/arm64` 并推送 GitHub Container Registry。
 
 镜像：
 
 ```text
 ghcr.io/rosenray/nas-media-manager:latest
-ghcr.io/rosenray/nas-media-manager:0.1.5
+ghcr.io/rosenray/nas-media-manager:0.1.6
 ```
 
 `latest` 用于日常更新，版本号标签用于固定版本和回退。
 
 ## 推荐部署
-
-`docker-compose.yml` 默认直接使用 GHCR 镜像，不再要求 NAS 保存源码或本地构建：
 
 ```yaml
 services:
@@ -153,16 +158,7 @@ services:
       - ./data:/data
 ```
 
-把左侧 `/你的NAS真实视频目录` 替换成 NAS 实际媒体路径即可。
-
-首次启动或更新：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-或者：
+更新：
 
 ```bash
 docker compose up -d --pull always
@@ -174,17 +170,9 @@ docker compose up -d --pull always
 http://NAS-IP:18765
 ```
 
-健康检查：
-
-```text
-http://NAS-IP:18765/health
-```
-
 绿联 NAS 的完整步骤见：[绿联 NAS Docker 部署](docs/DEPLOYMENT_UGREEN.md)。
 
 ### 本地源码构建
-
-开发调试仍可使用：
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
@@ -205,7 +193,7 @@ docker compose -f docker-compose.local.yml up -d --build
 ```text
 nas-media-manager/
 ├── .github/workflows/
-│   └── tests.yml             # 自动测试 + 多架构 Docker 镜像发布
+│   └── tests.yml
 ├── app/
 │   ├── core/
 │   │   ├── media.py
@@ -215,17 +203,14 @@ nas-media-manager/
 │   │   ├── batch.py
 │   │   └── thumbnails.py
 │   ├── static/
+│   │   ├── app.css
+│   │   └── mobile.css
 │   ├── templates/
 │   ├── config.py
 │   ├── db.py
 │   └── main.py
 ├── docs/
-│   ├── DEPLOYMENT_UGREEN.md
-│   ├── ROADMAP.md
-│   └── UGREEN_COMPATIBILITY.md
 ├── tests/
-│   ├── test_core.py
-│   └── test_batch.py
 ├── CHANGELOG.md
 ├── Dockerfile
 ├── docker-compose.yml
@@ -252,8 +237,9 @@ GitHub Actions 会在 `main` push 和 Pull Request 时自动执行完整测试�
 
 ## Roadmap
 
-下一阶段继续优先优化日常维护体验：
+移动端适配完成后，后续优先考虑：
 
+- PWA / 添加到 Android 主屏幕。
 - 已整理集合的海报 / 背景重新截图与替换。
 - 更高效的批量单集封面确认与重新截图。
 - Episode 调序 / 插入后的安全重编号方案。
