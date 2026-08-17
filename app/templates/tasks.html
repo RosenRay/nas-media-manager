@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}任务记录 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">HISTORY</div><h1>任务记录</h1></div></div>
+<section class="card flush">
+  <div class="list">
+  {% for item in tasks %}
+    <a class="list-row padded" href="/tasks/{{ item.id }}">
+      <span><strong>{{ item.summary }}</strong><small>{{ item.created_at }} · {{ item.operations|length }} 个操作</small></span>
+      <span class="badge {{ item.status }}">{{ item.status }}</span>
+    </a>
+  {% else %}<div class="empty">还没有任务。</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}
