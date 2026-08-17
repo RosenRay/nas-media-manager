@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}首页 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">UGREEN NAS · LOCAL METADATA</div>
+    <h1>把 NAS 里的普通视频<br>整理成可识别的剧集媒体库</h1>
+    <p>扫描 → 编排 → 预览 → 重命名/移动 → 生成 NFO 与剧集缩略图。所有文件操作都在你的 NAS 本地完成。</p>
+    <a class="btn primary" href="/browse">开始整理</a>
+  </div>
+</section>
+<div class="grid two">
+  <section class="card">
+    <div class="section-title"><h2>最近草稿</h2></div>
+    {% if drafts %}
+      <div class="list">
+      {% for item in drafts %}
+        <a class="list-row" href="/drafts/{{ item.id }}/edit">
+          <span><strong>{{ item.series_title }}</strong><small>{{ item.episode_count }} 个视频 · {{ item.updated_at }}</small></span>
+          <span class="badge">{{ item.status }}</span>
+        </a>
+      {% endfor %}
+      </div>
+    {% else %}<div class="empty">还没有整理草稿。</div>{% endif %}
+  </section>
+  <section class="card">
+    <div class="section-title"><h2>最近执行</h2><a href="/tasks">全部</a></div>
+    {% if tasks %}
+      <div class="list">
+      {% for item in tasks %}
+        <a class="list-row" href="/tasks/{{ item.id }}">
+          <span><strong>{{ item.summary }}</strong><small>{{ item.created_at }}</small></span>
+          <span class="badge {{ item.status }}">{{ item.status }}</span>
+        </a>
+      {% endfor %}
+      </div>
+    {% else %}<div class="empty">还没有执行记录。</div>{% endif %}
+  </section>
+</div>
+{% endblock %}
