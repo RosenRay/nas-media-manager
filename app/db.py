@@ -84,13 +84,16 @@ def list_drafts(limit: int = 10) -> list[dict[str, Any]]:
     result = []
     for row in rows:
         payload = json.loads(row["payload"])
+        kind = payload.get("kind", "organize")
         result.append({
             "id": row["id"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "status": row["status"],
+            "kind": kind,
             "series_title": payload.get("series_title", "未命名剧集"),
             "episode_count": len(payload.get("episodes", [])),
+            "edit_url": f"/append/{row['id']}/edit" if kind == "append" else f"/drafts/{row['id']}/edit",
         })
     return result
 
