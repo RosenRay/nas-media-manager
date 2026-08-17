@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import shutil
 from pathlib import Path
@@ -244,6 +245,10 @@ def _rollback(operations: list[dict[str, Any]]) -> None:
                 path = resolve_media_path(op["path"])
                 if path.exists():
                     path.unlink()
+            elif op["type"] == "replace":
+                path = resolve_media_path(op["path"])
+                if path.exists():
+                    path.write_bytes(base64.b64decode(op.get("before_b64", "")))
             elif op["type"] == "move":
                 src = resolve_media_path(op["src"])
                 dst = resolve_media_path(op["dst"])
@@ -310,6 +315,14 @@ def undo_operations(operations: list[dict[str, Any]]) -> list[str]:
                     if expected and _sha256(path) != expected:
                         raise RuntimeError(f"文件已被修改，拒绝删除：{op['path']}")
                     path.unlink()
+            elif op["type"] == "replace":
+                path = resolve_media_path(op["path"])
+                if not path.exists():
+                    raise RuntimeError(f"已修改文件不存在，无法撤销：{op['path']}")
+                expected = op.get("sha256")
+                if expected and _sha256(path) != expected:
+                    raise RuntimeError(f"文件已再次修改，拒绝覆盖：{op['path']}")
+                path.write_bytes(base64.b64decode(op.get("before_b64", "")))
             elif op["type"] == "move":
                 src = resolve_media_path(op["src"])
                 dst = resolve_media_path(op["dst"])
