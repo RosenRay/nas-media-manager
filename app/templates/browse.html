@@ -9,21 +9,22 @@
 {% if request.query_params.get('error') == 'no-folder-selection' %}<div class="alert danger">请至少选择一个可批量处理的文件夹。</div>{% endif %}
 <section class="card flush">
   <form method="post" action="/drafts/create" id="media-form">
-    <div class="toolbar">
-      {% if current %}<a class="btn ghost" href="/browse?path={{ parent|urlquote }}">← 上一级</a>{% endif %}
+    <div class="toolbar mobile-file-toolbar">
+      {% if current %}<a class="btn ghost up-link" href="/browse?path={{ parent|urlquote }}">← 上一级</a>{% endif %}
       <div class="select-tools">
         <label class="select-all"><input type="checkbox" id="select-all"> <span>全选视频</span></label>
-        <span class="selection-count">已选 <strong id="selected-count">0</strong> / <span id="video-count">0</span> 个视频</span>
+        <span class="selection-count">视频 <strong id="selected-count">0</strong>/<span id="video-count">0</span> · 文件夹 <strong id="folder-selected-count">0</strong></span>
       </div>
       <button class="btn primary" type="submit">创建视频集合</button>
-      <button class="btn ghost" type="submit" formaction="/batch/folders/create" id="batch-folders-btn" disabled>批量生成集合（<span id="folder-selected-count">0</span>）</button>
+      <button class="btn ghost" type="submit" formaction="/batch/folders/create" id="batch-folders-btn" disabled>批量生成集合</button>
     </div>
+    {% if current %}<div class="mobile-only" style="padding:10px 10px 0"><a class="btn ghost" style="width:100%" href="/browse?path={{ parent|urlquote }}">← 上一级</a></div>{% endif %}
     <div class="table-wrap">
-      <table>
+      <table class="mobile-media-table">
         <thead><tr><th class="check"></th><th>名称</th><th>时长 / 内容</th><th>分辨率</th><th>编码</th><th>大小</th><th>修改时间</th></tr></thead>
         <tbody>
         {% for e in entries %}
-          <tr>
+          <tr class="{% if e.is_video or (e.is_dir and e.batch_eligible) %}selectable-row{% endif %}">
             <td class="check">
               {% if e.is_video %}
                 <input class="video-checkbox" type="checkbox" name="selected" value="{{ e.rel_path }}" aria-label="选择视频 {{ e.name }}">
@@ -31,7 +32,7 @@
                 <input class="folder-checkbox" type="checkbox" name="selected_folder" value="{{ e.rel_path }}" aria-label="选择文件夹 {{ e.name }}">
               {% endif %}
             </td>
-            <td>
+            <td class="name-cell">
               {% if e.is_dir %}
                 <a class="file-name folder" href="/browse?path={{ e.rel_path|urlquote }}">📁 {{ e.name }}</a>
                 {% if e.batch_eligible %}<span class="muted"> · {{ e.batch_video_count }} 个视频</span>
@@ -39,8 +40,11 @@
               {% elif e.is_video %}<span class="file-name">🎞 {{ e.name }}</span>
               {% else %}<span class="file-name muted">{{ e.name }}</span>{% endif %}
             </td>
-            <td>{% if e.is_dir and e.batch_eligible %}{{ e.batch_video_count }} 个视频{% else %}{{ e.duration_text }}{% endif %}</td>
-            <td>{{ e.resolution }}</td><td>{{ e.codec }}</td><td>{{ e.size_text }}</td><td>{{ e.mtime }}</td>
+            <td class="mobile-meta" data-label="{% if e.is_dir %}内容{% else %}时长{% endif %}">{% if e.is_dir and e.batch_eligible %}{{ e.batch_video_count }} 个视频{% else %}{{ e.duration_text }}{% endif %}</td>
+            <td class="mobile-meta" data-label="分辨率">{{ e.resolution }}</td>
+            <td class="mobile-hide">{{ e.codec }}</td>
+            <td class="mobile-meta" data-label="大小">{{ e.size_text }}</td>
+            <td class="mobile-secondary">{{ e.mtime }}</td>
           </tr>
         {% else %}<tr><td colspan="7" class="empty">这个目录是空的。</td></tr>{% endfor %}
         </tbody>
@@ -59,21 +63,33 @@
   const batchButton = document.getElementById('batch-folders-btn');
 
   videoCount.textContent = videos.length;
+  function markRows() {
+    [...videos, ...folders].forEach(input => input.closest('tr')?.classList.toggle('selected', input.checked));
+  }
   function refreshVideos() {
     const count = videos.filter(x => x.checked).length;
     selectedCount.textContent = count;
     all.checked = videos.length > 0 && count === videos.length;
     all.indeterminate = count > 0 && count < videos.length;
+    markRows();
   }
   function refreshFolders() {
     const count = folders.filter(x => x.checked).length;
     folderSelectedCount.textContent = count;
     batchButton.disabled = count === 0;
+    markRows();
   }
 
   all.addEventListener('change', () => { videos.forEach(x => x.checked = all.checked); refreshVideos(); });
   videos.forEach(x => x.addEventListener('change', refreshVideos));
   folders.forEach(x => x.addEventListener('change', refreshFolders));
+  document.querySelectorAll('.selectable-row').forEach(row => row.addEventListener('click', event => {
+    if (event.target.closest('a,input,button,label')) return;
+    const input = row.querySelector('input[type="checkbox"]');
+    if (!input) return;
+    input.checked = !input.checked;
+    input.dispatchEvent(new Event('change', {bubbles:true}));
+  }));
   refreshVideos();
   refreshFolders();
 })();
