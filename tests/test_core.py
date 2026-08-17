@@ -242,3 +242,96 @@ def test_auto_episode_thumbnail_uses_real_video_and_can_undo():
     assert thumb.exists() and thumb.stat().st_size > 0
     assert undo_operations(ops) == []
     assert source.exists()
+
+
+def make_ugreen_collection(name='家庭相册', episodes=(1, 2)):
+    from app.core.nfo import episode_nfo, tvshow_nfo
+    root = MEDIA / name
+    season = root / 'Season 01'
+    season.mkdir(parents=True, exist_ok=True)
+    (root / 'tvshow.nfo').write_text(tvshow_nfo(title=name, plot='原简介', year='2026', genres=['家庭影像']), encoding='utf-8')
+    for no in episodes:
+        video = season / f'{name} - S01E{no:02d}.mp4'
+        video.write_bytes(f'video-{no}'.encode())
+        video.with_suffix('.nfo').write_text(episode_nfo(title=f'第{no}集', showtitle=name, season=1, episode=no, plot='', aired=''), encoding='utf-8')
+    return root
+
+
+def test_collection_discovery_and_integrity_check():
+    reset_media()
+    root = make_ugreen_collection(episodes=(1, 3))
+    (root / 'poster.jpg').write_bytes(b'poster')
+    from app.core.collections import list_collections, load_collection
+    items = list_collections()
+    assert len(items) == 1
+    item = load_collection('家庭相册')
+    assert item['episode_count'] == 2
+    codes = {x['code'] for x in item['issues']}
+    assert 'missing_fanart' in codes
+    assert 'missing_episode_thumb' in codes
+    assert 'episode_gap' in codes
+
+
+def test_collection_metadata_update_can_undo():
+    reset_media()
+    make_ugreen_collection(episodes=(1,))
+    from app.core.collections import update_collection_metadata
+    ops = update_collection_metadata('家庭相册', title='家庭影像集', plot='新简介', year='2027', genres='家庭,旅行')
+    show = (MEDIA / '家庭相册' / 'tvshow.nfo').read_text(encoding='utf-8')
+    ep = (MEDIA / '家庭相册' / 'Season 01' / '家庭相册 - S01E01.nfo').read_text(encoding='utf-8')
+    assert '<title>家庭影像集</title>' in show
+    assert '<showtitle>家庭影像集</showtitle>' in ep
+    assert undo_operations(ops) == []
+    restored = (MEDIA / '家庭相册' / 'tvshow.nfo').read_text(encoding='utf-8')
+    assert '<title>家庭相册</title>' in restored
+
+
+def test_episode_metadata_update_does_not_rename_video():
+    reset_media()
+    make_ugreen_collection(episodes=(1,))
+    from app.core.collections import update_episode_metadata
+    video_rel = '家庭相册/Season 01/家庭相册 - S01E01.mp4'
+    ops = update_episode_metadata('家庭相册', video_rel, title='公园玩耍', plot='下午去公园', aired='2026-08-17')
+    assert (MEDIA / video_rel).exists()
+    nfo = (MEDIA / '家庭相册' / 'Season 01' / '家庭相册 - S01E01.nfo').read_text(encoding='utf-8')
+    assert '<title>公园玩耍</title>' in nfo
+    assert '<aired>2026-08-17</aired>' in nfo
+    assert undo_operations(ops) == []
+
+
+def test_append_preview_starts_after_current_max_and_keeps_existing():
+    reset_media()
+    make_ugreen_collection(episodes=(1, 2, 3))
+    source_dir = MEDIA / '待追加'
+    source_dir.mkdir()
+    (source_dir / 'new-a.mp4').write_bytes(b'a')
+    (source_dir / 'new-b.mp4').write_bytes(b'b')
+    from app.core.collections import build_append_payload, preview_append, execute_append
+    payload = build_append_payload('家庭相册', ['待追加/new-a.mp4', '待追加/new-b.mp4'])
+    payload['auto_episode_thumbs'] = False
+    assert [x['episode'] for x in payload['episodes']] == [4, 5]
+    plan = preview_append(payload)
+    assert not plan['conflicts']
+    assert plan['items'][0]['target'].endswith('家庭相册 - S01E04.mp4')
+    ops = execute_append(payload)
+    assert (MEDIA / '家庭相册' / 'Season 01' / '家庭相册 - S01E01.mp4').exists()
+    assert (MEDIA / '家庭相册' / 'Season 01' / '家庭相册 - S01E04.mp4').exists()
+    assert (MEDIA / '家庭相册' / 'Season 01' / '家庭相册 - S01E05.nfo').exists()
+    assert undo_operations(ops) == []
+    assert (source_dir / 'new-a.mp4').exists()
+    assert (source_dir / 'new-b.mp4').exists()
+
+
+def test_append_keeps_existing_filename_prefix_after_display_title_change():
+    reset_media()
+    make_ugreen_collection(episodes=(1,))
+    from app.core.collections import update_collection_metadata, build_append_payload, preview_append
+    update_collection_metadata('家庭相册', title='新的展示标题', plot='', year='', genres='家庭影像')
+    src = MEDIA / '新增'
+    src.mkdir()
+    (src / 'a.mp4').write_bytes(b'a')
+    payload = build_append_payload('家庭相册', ['新增/a.mp4'])
+    payload['auto_episode_thumbs'] = False
+    plan = preview_append(payload)
+    assert plan['items'][0]['target'].endswith('家庭相册 - S01E02.mp4')
+    assert plan['collection']['title'] == '新的展示标题'
