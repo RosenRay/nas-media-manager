@@ -2,6 +2,10 @@ from datetime import datetime
 import os
 from pathlib import Path
 
+# Match test_core.py's process-wide MEDIA_ROOT before app modules are imported.
+os.environ['MEDIA_ROOT'] = '/tmp/nmm-v013-tests/media'
+os.environ['DATA_ROOT'] = '/tmp/nmm-v013-tests/data'
+
 import app.core.media as media
 from app.core.batch import build_batch_payload, build_folder_collection_payload, execute_batch_payload
 from app.core.organizer import undo_operations
