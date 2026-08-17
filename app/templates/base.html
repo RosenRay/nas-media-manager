@@ -10,11 +10,12 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/">NAS 媒体整理器 <span>v0.1.6</span></a>
+  <a class="brand" href="/">NAS 媒体整理器 <span>v{{ app_version }}</span></a>
   <nav>
     <a href="/browse">媒体文件</a>
     <a href="/collections">已整理集合</a>
     <a href="/tasks">任务记录</a>
+    <a href="/settings">设置</a>
   </nav>
 </header>
 <main class="container">
@@ -25,6 +26,7 @@
   <a href="/browse" class="{% if request.url.path.startswith('/browse') or request.url.path.startswith('/drafts') or request.url.path.startswith('/batch') %}active{% endif %}"><span class="nav-icon">▣</span><span>媒体</span></a>
   <a href="/collections" class="{% if request.url.path.startswith('/collection') or request.url.path.startswith('/append') %}active{% endif %}"><span class="nav-icon">▤</span><span>集合</span></a>
   <a href="/tasks" class="{% if request.url.path.startswith('/tasks') %}active{% endif %}"><span class="nav-icon">✓</span><span>任务</span></a>
+  <a href="/settings" class="{% if request.url.path.startswith('/settings') %}active{% endif %}"><span class="nav-icon">⚙</span><span>设置</span></a>
 </nav>
 </body>
 </html>
