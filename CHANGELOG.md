@@ -2,6 +2,41 @@
 
 本项目遵循语义化版本号的思路进行版本归档。当前仓库从已在绿联 NAS 实机验证的 `v0.1.3` 开始归档。
 
+## v0.1.7 - 2026-08-17
+
+### 轻量更新 Runtime
+
+- Docker 运行环境与应用代码正式分离。
+- 新增稳定 Runtime Launcher：Docker 容器内由父进程启动 Uvicorn 子进程，检测应用版本切换后自动重启 Web 服务，不需要重启整个容器。
+- 应用代码持久化到 `/data/app_runtime/versions/<version>`，`/data/app_runtime/current` 使用符号链接指向当前版本。
+- 第一次迁移使用 `ghcr.io/rosenray/nas-media-manager:runtime-1`，之后普通应用更新不再要求重新拉 Docker 镜像。
+- 新增 `RUNTIME_API` 兼容级别。未来 Python、FFmpeg、requirements 或 Runtime Launcher 变化时才升级 Runtime。
+
+### 应用内更新
+
+- 手机端与桌面端新增“设置”入口，手机底部导航扩展为“媒体 / 集合 / 任务 / 设置”。
+- 设置页支持检查 GitHub 最新 Release。
+- 支持直接下载轻量 `nas-media-manager-update-<version>.tar.gz` 更新包。
+- 安装前校验 SHA256。
+- 解压前校验路径并拒绝目录穿越、符号链接与硬链接。
+- 更新包先写入独立版本目录，再原子切换 `current`，避免半更新状态。
+- 新版本要求更高 `runtime_api` 时停止轻量更新并提示更新 Docker Runtime。
+- 已安装旧版本可在设置页一键回滚；回滚只切换应用代码，不修改数据库、草稿、缩略图和媒体文件。
+
+### 发布流水线
+
+- GitHub Actions 在 pytest 通过后生成轻量更新包和 `update-manifest.json`。
+- 轻量更新包作为 GitHub Release 资产发布，并同时保留 workflow artifact。
+- CI 会检测 `Dockerfile`、`requirements.txt`、`runtime/`、`RUNTIME_API` 是否变化。
+- 普通应用代码变化不再构建 Docker Runtime。
+- Runtime 发生变化时才构建 amd64 + arm64 多架构 `runtime-N` 镜像。
+
+### 文档与测试
+
+- 新增 `docs/LIGHTWEIGHT_UPDATES.md`。
+- README 更新为 v0.1.7 部署与升级流程。
+- 新增轻量更新安装、Runtime 兼容检查、路径安全校验、回滚和 Launcher 契约测试。
+
 ## v0.1.6 - 2026-08-17
 
 ### 手机端体验
