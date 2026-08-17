@@ -131,7 +131,7 @@ def _safe_extract(archive: Path, destination: Path) -> None:
                 resolved.relative_to(destination)
             except ValueError as exc:
                 raise UpdateError("更新包路径越界") from exc
-        tf.extractall(destination)
+        tf.extractall(destination, members=members, filter="data")
 
 
 def _atomic_switch(target: Path) -> None:
