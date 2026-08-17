@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}设置 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">SYSTEM & UPDATE</div><h1>设置与更新</h1></div>
+</div>
+
+{% if request.query_params.get('updated') %}<div class="alert success">轻量更新已安装到 v{{ request.query_params.get('updated') }}，Runtime 正在重启应用服务；数秒后刷新即可。</div>{% endif %}
+{% if request.query_params.get('rollback') %}<div class="alert success">已切换到 v{{ request.query_params.get('rollback') }}，Runtime 正在重启应用服务。</div>{% endif %}
+{% if update_error %}<div class="alert danger">{{ update_error }}</div>{% endif %}
+
+<div class="stats four">
+  <div><strong>v{{ app_version }}</strong><span>当前应用版本</span></div>
+  <div><strong>{{ runtime_api }}</strong><span>Runtime API</span></div>
+  <div><strong>{% if managed_runtime %}✓{% else %}—{% endif %}</strong><span>轻量更新 Runtime</span></div>
+  <div><strong>{{ installed|length }}</strong><span>已保留版本</span></div>
+</div>
+
+<section class="card">
+  <div class="section-title"><h2>在线更新</h2><span class="hint">普通 Python / HTML / CSS / JS 更新只下载轻量包，不重新拉取 FFmpeg 和 Python Docker 层。</span></div>
+  {% if not managed_runtime %}
+    <div class="alert warning">当前容器还是旧的整包运行方式。需要最后一次切换到 <code>runtime-1</code> Docker 镜像，之后才能使用轻量更新。</div>
+  {% endif %}
+
+  {% if latest %}
+    <div class="path-preview">
+      当前版本：v{{ app_version }}<br>
+      最新版本：v{{ latest.latest_version }}<br>
+      更新包：{{ latest.archive }}{% if latest.size %} · {{ latest.size }} bytes{% endif %}<br>
+      需要 Runtime API：{{ latest.runtime_api_required }}
+    </div>
+    {% if latest.runtime_upgrade_required %}
+      <div class="alert warning" style="margin-top:14px">这个版本包含运行环境变化，需要先更新 Docker Runtime；不会尝试直接覆盖当前运行环境。</div>
+    {% elif latest.has_update %}
+      <div class="alert success" style="margin-top:14px">发现新版本。更新前会校验 SHA256，并保留当前版本供回滚。</div>
+    {% else %}
+      <div class="alert success" style="margin-top:14px">当前已经是最新版本。</div>
+    {% endif %}
+  {% endif %}
+
+  <div class="inline-actions">
+    <a class="btn ghost" href="/settings?check=1">检查更新</a>
+    <form method="post" action="/settings/update">
+      <button class="btn primary" type="submit" {% if not managed_runtime or not latest or not latest.has_update or latest.runtime_upgrade_required %}disabled{% endif %}>立即轻量更新</button>
+    </form>
+  </div>
+</section>
+
+<section class="card">
+  <div class="section-title"><h2>版本回滚</h2><span class="hint">仅切换应用代码版本；不会删除 /data 数据库、草稿、缩略图或媒体文件。</span></div>
+  {% if installed %}
+    <div class="list">
+      {% for item in installed %}
+      <div class="list-row padded">
+        <span><strong>v{{ item.version }}</strong><small>{% if item.current %}当前运行版本{% else %}已安装，可回滚{% endif %}</small></span>
+        {% if not item.current %}
+        <form method="post" action="/settings/rollback" onsubmit="return confirm('确认切换到 v{{ item.version }}？应用服务会短暂重启。')">
+          <input type="hidden" name="version" value="{{ item.version }}">
+          <button class="btn ghost" type="submit" {% if not managed_runtime %}disabled{% endif %}>回滚</button>
+        </form>
+        {% else %}<span class="badge success">当前</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">当前尚未由 Runtime 管理应用版本。</div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="section-title"><h2>更新策略</h2></div>
+  <div class="path-preview">普通版本：轻量更新包 → SHA256 校验 → 安装到 /data/app_runtime/versions → 原子切换 current → 自动重启应用<br>运行环境变化：Python / FFmpeg / requirements / Runtime Launcher → 更新 Docker runtime-N 镜像</div>
+</section>
+{% endblock %}

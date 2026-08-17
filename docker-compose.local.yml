@@ -4,11 +4,17 @@ services:
     image: nas-media-manager:local
     container_name: nas-media-manager-local
     restart: unless-stopped
+    working_dir: /workspace
+    command: ["python", "-m", "uvicorn", "app.runtime_main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "18765:8000"
     environment:
       MEDIA_ROOT: /media
       DATA_ROOT: /data
+      NMM_RUNTIME_MANAGED: "0"
+      NMM_RUNTIME_API: "1"
     volumes:
       - /volume1/video:/media
       - ./data:/data
+      - ./app:/workspace/app
+      - ./VERSION:/workspace/VERSION:ro

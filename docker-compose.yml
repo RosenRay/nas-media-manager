@@ -1,6 +1,8 @@
 services:
   nas-media-manager:
-    image: ghcr.io/rosenray/nas-media-manager:latest
+    # Runtime 镜像只在 Python / FFmpeg / requirements 等运行环境变化时更新。
+    # 普通版本升级由应用内“设置 → 检查更新”下载轻量代码包完成。
+    image: ghcr.io/rosenray/nas-media-manager:runtime-1
     container_name: nas-media-manager
     restart: unless-stopped
     ports:
@@ -8,8 +10,10 @@ services:
     environment:
       MEDIA_ROOT: /media
       DATA_ROOT: /data
+      APP_RUNTIME_ROOT: /data/app_runtime
+      NMM_RUNTIME_API: "1"
     volumes:
       # 修改左侧路径为你绿联 NAS 上希望管理的视频目录。
       - /volume1/video:/media
-      # 持久化 SQLite、草稿图片与缩略图缓存。
+      # 持久化 SQLite、草稿、缩略图以及轻量更新后的 app 版本。
       - ./data:/data

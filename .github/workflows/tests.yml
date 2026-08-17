@@ -1,4 +1,4 @@
-name: tests-and-image
+name: tests-and-release
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -26,18 +26,112 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
-  publish-image:
-    name: Build and publish Docker image
+  package-update:
+    name: Publish lightweight update package
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: pytest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Read app version
+      - name: Build lightweight update bundle
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          RUNTIME_API="$(tr -d '[:space:]' < RUNTIME_API)"
+          ARCHIVE="nas-media-manager-update-${VERSION}.tar.gz"
+          tar -czf "$ARCHIVE" app VERSION
+          SHA256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
+          SIZE="$(stat -c '%s' "$ARCHIVE")"
+          python - <<PY
+          import json
+          from pathlib import Path
+          data = {
+              "version": "${VERSION}",
+              "runtime_api": int("${RUNTIME_API}"),
+              "archive": "${ARCHIVE}",
+              "sha256": "${SHA256}",
+              "size": int("${SIZE}"),
+              "commit": "${GITHUB_SHA}",
+          }
+          Path("update-manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: lightweight-update-${{ steps.bundle.outputs.version }}
+          path: |
+            ${{ steps.bundle.outputs.archive }}
+            update-manifest.json
+          retention-days: 30
+
+      - name: Create or refresh GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.bundle.outputs.version }}"
+          TAG="v${VERSION}"
+          ARCHIVE="${{ steps.bundle.outputs.archive }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" update-manifest.json --clobber
+            gh release edit "$TAG" --title "NAS Media Manager v${VERSION}" --latest
+          else
+            gh release create "$TAG" "$ARCHIVE" update-manifest.json \
+              --target "$GITHUB_SHA" \
+              --title "NAS Media Manager v${VERSION}" \
+              --notes "轻量更新包：应用代码更新不再需要重新下载 Python / FFmpeg Docker 运行环境。" \
+              --latest
+          fi
+
+  detect-runtime-change:
+    name: Detect runtime changes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: pytest
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect Docker runtime changes
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$GITHUB_SHA" -- Dockerfile requirements.txt runtime RUNTIME_API | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish-runtime:
+    name: Build and publish Docker runtime
+    if: needs.detect-runtime-change.outputs.changed == 'true'
+    needs: [pytest, detect-runtime-change]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read versions
         id: version
         shell: bash
-        run: echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "app=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+          echo "runtime=$(tr -d '[:space:]' < RUNTIME_API)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -52,18 +146,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push multi-arch image
+      - name: Build and push stable runtime
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
+            ghcr.io/rosenray/nas-media-manager:runtime-${{ steps.version.outputs.runtime }}
             ghcr.io/rosenray/nas-media-manager:latest
-            ghcr.io/rosenray/nas-media-manager:${{ steps.version.outputs.value }}
+            ghcr.io/rosenray/nas-media-manager:${{ steps.version.outputs.app }}-runtime${{ steps.version.outputs.runtime }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            org.opencontainers.image.version=${{ steps.version.outputs.app }}
+            io.rosenray.nas-media-manager.runtime-api=${{ steps.version.outputs.runtime }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
