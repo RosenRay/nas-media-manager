@@ -38,6 +38,67 @@ def is_video(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
 
 
+def current_year() -> str:
+    return str(datetime.now().year)
+
+
+def default_media_date(path: Path) -> str:
+    """Return a stable default date for episode metadata.
+
+    Some copied/exported files carry an invalid Unix-epoch mtime (1970). For
+    those values we use today's date instead of writing 1970 into the NFO.
+    """
+    now = datetime.now()
+    try:
+        value = datetime.fromtimestamp(path.stat().st_mtime)
+    except (OSError, OverflowError, ValueError):
+        value = now
+    if value.year < 1980 or value.year > now.year + 1:
+        value = now
+    return value.strftime("%Y-%m-%d")
+
+
+def inspect_batch_folder(path: Path) -> dict[str, Any]:
+    """Inspect one folder for the shallow one-folder-one-collection workflow.
+
+    Batch mode intentionally considers only videos directly inside the selected
+    folder. Nested folders are left untouched so selecting a high-level folder
+    cannot accidentally merge several child collections together.
+    """
+    result = {"video_count": 0, "eligible": False, "reason": ""}
+    if not path.exists() or not path.is_dir():
+        result["reason"] = "目录不存在"
+        return result
+    if (path / "tvshow.nfo").exists():
+        result["reason"] = "已整理集合"
+        return result
+    try:
+        children = list(path.iterdir())
+    except OSError:
+        result["reason"] = "无法读取目录"
+        return result
+
+    # A Season xx folder containing scraper-style SxxExx videos is treated as
+    # an existing/incomplete managed collection even if tvshow.nfo is missing.
+    episode_re = re.compile(r"(?i)S\d{1,2}E\d{1,3}")
+    for child in children:
+        if child.is_dir() and re.match(r"(?i)^Season[\s._-]*\d+$", child.name):
+            try:
+                if any(is_video(item) and episode_re.search(item.stem) for item in child.iterdir()):
+                    result["reason"] = "疑似已整理集合"
+                    return result
+            except OSError:
+                pass
+
+    videos = [child for child in children if is_video(child)]
+    result["video_count"] = len(videos)
+    if not videos:
+        result["reason"] = "无视频"
+        return result
+    result["eligible"] = True
+    return result
+
+
 def human_size(size: int) -> str:
     units = ["B", "KB", "MB", "GB", "TB"]
     value = float(size)
@@ -111,6 +172,16 @@ def scan_directory(relative: str = "") -> dict[str, Any]:
             "resolution": "—",
             "codec": "—",
         }
+        if item["is_dir"]:
+            batch = inspect_batch_folder(child)
+            item["batch_video_count"] = batch["video_count"]
+            item["batch_eligible"] = batch["eligible"]
+            item["batch_skip_reason"] = batch["reason"]
+        else:
+            item["batch_video_count"] = 0
+            item["batch_eligible"] = False
+            item["batch_skip_reason"] = ""
+
         idx = len(entries)
         entries.append(item)
         if item["is_video"]:
@@ -201,7 +272,7 @@ def default_draft(selected_rel_paths: list[str]) -> dict[str, Any]:
             "episode": idx,
             "title": default_episode_title(path.name, idx),
             "plot": "",
-            "aired": "",
+            "aired": default_media_date(path),
             "duration": meta.get("duration"),
             "duration_text": format_duration(meta.get("duration")),
             "resolution": f"{meta.get('width')}×{meta.get('height')}" if meta.get("width") and meta.get("height") else "—",
@@ -216,7 +287,7 @@ def default_draft(selected_rel_paths: list[str]) -> dict[str, Any]:
         "auto_episode_thumbs": True,
         "series_title": series_title,
         "series_plot": "",
-        "year": "",
+        "year": current_year(),
         "genres": "家庭影像",
         "season": detected_season,
         "season_title": f"Season {detected_season:02d}",
