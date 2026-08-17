@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}编辑视频集合 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">DRAFT {{ draft.id }}</div><h1>编辑视频集合</h1></div>
+  <a class="btn ghost" href="/browse?path={{ payload.source_dir|urlquote }}">返回文件目录</a>
+</div>
+{% if request.query_params.get('saved') %}<div class="alert success">草稿已保存。</div>{% endif %}
+<form method="post" action="/drafts/{{ draft.id }}/save" enctype="multipart/form-data">
+  <section class="card">
+    <div class="section-title"><h2>集合信息</h2><span class="hint">“家庭影像”在界面上不分季；开启绿联兼容输出后，磁盘上仍使用 Season 01 目录帮助影视中心稳定归组。</span></div>
+    <div class="mode-switch">
+      <label><input type="radio" name="mode" value="organize" {% if payload.mode != 'metadata_only' %}checked{% endif %}> <span><strong>整理并生成媒资</strong><small>重命名/移动视频，并生成 NFO、图片</small></span></label>
+      <label><input type="radio" name="mode" value="metadata_only" {% if payload.mode == 'metadata_only' %}checked{% endif %}> <span><strong>仅生成媒资</strong><small>不修改视频路径，只在现有目录旁生成 NFO、图片</small></span></label>
+    </div>
+    <div class="mode-switch organization-switch">
+      <label><input type="radio" name="organization_mode" value="flat" {% if payload.organization_mode != 'seasoned' %}checked{% endif %}> <span><strong>家庭影像 / 不分季</strong><small>适合家庭录像、旅行、Vlog；界面不展示 Season</small></span></label>
+      <label><input type="radio" name="organization_mode" value="seasoned" {% if payload.organization_mode == 'seasoned' %}checked{% endif %}> <span><strong>按季组织</strong><small>适合课程、长期系列；显式管理 Season 与 season.nfo</small></span></label>
+    </div>
+    <div class="compat-options">
+      <label class="option-check compat-flat"><input type="checkbox" name="ugreen_compat" value="1" {% if payload.ugreen_compat %}checked{% endif %}> <span><strong>绿联兼容输出（推荐）</strong><small>家庭影像仍显示为“不分季”，但实际输出到 Season 01；文件名只保留“集合名 - S01E01”，具体单集标题写入 NFO，减少错误拆分集合的概率。</small></span></label>
+    </div>
+    <div class="form-grid two">
+      <label>集合名称<input name="series_title" value="{{ payload.series_title }}" required></label>
+      <label>输出父目录<input name="output_parent" value="{{ payload.output_parent }}" placeholder="例如：家庭录像"></label>
+      <label class="season-field">季编号<input type="number" min="1" name="season" value="{{ payload.season }}" required></label>
+      <label class="season-field">季名称<input name="season_title" value="{{ payload.season_title }}"></label>
+      <label>年份<input name="year" value="{{ payload.year }}" inputmode="numeric" placeholder="2026"></label>
+      <label>类型 / Genre<input name="genres" value="{{ payload.genres }}" placeholder="家庭影像, 旅行"></label>
+      <label class="span-2">集合简介<textarea name="series_plot" rows="3">{{ payload.series_plot }}</textarea></label>
+    </div>
+  </section>
+
+  <section class="card" id="series-artwork">
+    <div class="section-title"><h2>集合海报与背景</h2><span class="hint">可上传图片，也可从本集合任意视频截取 5 张候选画面。</span></div>
+    <div class="artwork-grid">
+      {% for kind, title, filename in [('poster','总海报','poster.jpg'), ('fanart','背景图','fanart.jpg')] %}
+      <div class="artwork-panel">
+        <div class="thumb-title"><strong>{{ title }} · {{ filename }}</strong><span>若选择截图候选，将优先使用截图；否则使用已上传图片。</span></div>
+        <label>上传图片<input type="file" name="{{ kind }}" accept="image/*"><small>{% if payload[kind ~ '_cache'] %}已有上传缓存{% endif %}</small></label>
+        <label>截图来源视频
+          <select name="{{ kind }}_source">
+            {% for ep in payload.episodes %}
+              <option value="{{ ep.source }}" {% if payload[kind ~ '_source'] == ep.source %}selected{% endif %}>E{{ "%02d"|format(ep.episode) }} · {{ ep.title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% set artwork_thumbs = payload[kind ~ '_thumbs'] %}
+        {% if artwork_thumbs %}
+        <div class="thumbs">
+          {% for thumb in artwork_thumbs %}
+          <label class="thumb-card">
+            <input type="radio" name="selected_{{ kind }}_thumb" value="{{ thumb.filename }}" {% if payload['selected_' ~ kind ~ '_thumb'] == thumb.filename %}checked{% endif %}>
+            <img src="{{ thumb.url }}" loading="lazy"><span>{{ loop.index }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}<div class="muted">尚未从视频生成候选图片。</div>{% endif %}
+        <button class="btn ghost thumb-button" formmethod="post" formaction="/drafts/{{ draft.id }}/artwork/{{ kind }}" formenctype="application/x-www-form-urlencoded" type="submit">从所选视频生成 / 重新生成候选图</button>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="section-title standalone"><h2>视频编排</h2><span class="hint">标题默认从文件名清洗得到；纯 Hash 文件名会自动改为“第1集 / 第2集…”，可继续手工修改。</span></div>
+  <div class="card compact-card">
+    <label class="option-check"><input type="checkbox" name="auto_episode_thumbs" value="1" {% if payload.auto_episode_thumbs %}checked{% endif %}> <span><strong>自动补齐未设置的单集封面</strong><small>执行整理时，对没有手工选择缩略图的单集，自动截取视频约 50% 位置作为默认 JPG；手工选择的候选图始终优先。</small></span></label>
+  </div>
+  {% for ep in payload.episodes %}
+  {% set idx = loop.index0 %}
+  <section class="card episode" id="episode-{{ idx }}">
+    <div class="episode-head">
+      <div><span class="episode-no">E{{ "%02d"|format(ep.episode) }}</span><strong>{{ ep.source }}</strong></div>
+      <span class="muted">{{ ep.duration_text }} · {{ ep.resolution }}</span>
+    </div>
+    <div class="form-grid ep-grid">
+      <label>编号<input type="number" min="1" name="episode_{{ idx }}" value="{{ ep.episode }}"></label>
+      <label class="grow">标题<input name="title_{{ idx }}" value="{{ ep.title }}" required></label>
+      <label>日期<input type="date" name="aired_{{ idx }}" value="{{ ep.aired }}"></label>
+      <label class="span-all">单集简介<textarea name="plot_{{ idx }}" rows="2">{{ ep.plot }}</textarea></label>
+    </div>
+    <div class="thumb-zone">
+      <div class="thumb-title"><strong>单集缩略图</strong><span>从视频 10% / 30% / 50% / 70% / 90% 位置截取</span></div>
+      {% if ep.thumbs %}
+      <div class="thumbs">
+        {% for thumb in ep.thumbs %}
+        <label class="thumb-card">
+          <input type="radio" name="selected_thumb_{{ idx }}" value="{{ thumb.filename }}" {% if ep.selected_thumb == thumb.filename %}checked{% endif %}>
+          <img src="{{ thumb.url }}" loading="lazy"><span>{{ loop.index }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}<div class="muted">尚未生成候选图片。</div>{% endif %}
+      <button class="btn ghost thumb-button" formmethod="post" formaction="/drafts/{{ draft.id }}/thumbs/{{ idx }}" formenctype="application/x-www-form-urlencoded" type="submit">生成 / 重新生成候选图</button>
+    </div>
+  </section>
+  {% endfor %}
+
+  <div class="sticky-actions">
+    <button class="btn ghost" name="action" value="save" type="submit">保存草稿</button>
+    <button class="btn primary" name="action" value="preview" type="submit">保存并预览执行</button>
+  </div>
+</form>
+<script>
+(() => {
+  const radios = [...document.querySelectorAll('input[name="organization_mode"]')];
+  const fields = [...document.querySelectorAll('.season-field')];
+  const compat = [...document.querySelectorAll('.compat-flat')];
+  function refresh() {
+    const selected = radios.find(x => x.checked)?.value || 'flat';
+    fields.forEach(x => x.style.display = selected === 'seasoned' ? '' : 'none');
+    compat.forEach(x => x.style.display = selected === 'flat' ? '' : 'none');
+  }
+  radios.forEach(x => x.addEventListener('change', refresh));
+  refresh();
+})();
+</script>
+{% endblock %}
