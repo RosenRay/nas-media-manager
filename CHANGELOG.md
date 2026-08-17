@@ -29,10 +29,20 @@
 - 默认自动生成 Episode JPG；集合级 poster / fanart 仍可后续通过集合维护能力补充或替换。
 - 一个批量任务中的多个集合统一记录到任务历史；中途失败时会尝试回滚此前已经完成的集合，成功任务仍可整体撤销。
 
+### Docker 部署与自动发布
+
+- 默认 `docker-compose.yml` 从源码 `build` 改为直接使用 `ghcr.io/rosenray/nas-media-manager:latest`。
+- 新增 `docker-compose.local.yml`，开发调试时仍可从源码本地构建。
+- GitHub Actions 在 `main` 测试通过后自动构建并发布 Docker 镜像。
+- 同时构建 `linux/amd64` 与 `linux/arm64`，兼容常见 x86 与 ARM NAS。
+- 每次发布同时推送 `latest` 和 `VERSION` 文件对应的版本标签。
+- NAS 后续更新只需要重新拉取镜像并重建容器，不需要重新上传项目源码。
+- 更新 GitHub Actions 到当前 Node 24 兼容的 Action 主版本。
+
 ### 验证
 
 - 新增 5 项批量流程与默认日期测试，覆盖 1970 回退、目录过滤、文件夹名称映射、浅层扫描以及批量执行 / 撤销。
-- 新增 GitHub Actions 测试工作流，后续提交自动执行完整 pytest 回归。
+- GitHub Actions 自动执行完整 pytest 回归；Docker 镜像发布依赖测试成功。
 
 ## v0.1.4 - 2026-08-17
 
