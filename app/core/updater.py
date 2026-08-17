@@ -102,6 +102,7 @@ def check_for_update() -> dict:
         "latest_version": latest,
         "has_update": _version_key(latest) > _version_key(APP_VERSION),
         "runtime_upgrade_required": required_runtime > RUNTIME_API,
+        "runtime_api_required": required_runtime,
         "runtime_api": RUNTIME_API,
         "managed_runtime": RUNTIME_MANAGED,
     }
