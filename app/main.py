@@ -13,6 +13,19 @@ from starlette.datastructures import UploadFile
 
 from app.config import MEDIA_ROOT, THUMB_ROOT, UPLOAD_ROOT, ensure_runtime_dirs
 from app.core.media import MediaPathError, default_draft, scan_directory
+from app.core.collections import (
+    CollectionConflictError,
+    CollectionError,
+    apply_append_form,
+    build_append_payload,
+    execute_append,
+    list_collections,
+    load_collection,
+    preview_append,
+    repair_collection,
+    update_collection_metadata,
+    update_episode_metadata,
+)
 from app.core.organizer import PlanConflictError, execute_plan, preview_plan, undo_operations
 from app.core.thumbnails import generate_artwork_candidates, generate_candidates, save_uploaded_artwork
 from app.db import (
@@ -35,7 +48,7 @@ async def lifespan(app: FastAPI):
 
 
 ensure_runtime_dirs()
-app = FastAPI(title="NAS Media Manager", version="0.1.3", lifespan=lifespan)
+app = FastAPI(title="NAS Media Manager", version="0.1.4", lifespan=lifespan)
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/thumb-cache", StaticFiles(directory=THUMB_ROOT), name="thumb-cache")
@@ -70,6 +83,13 @@ def require_draft(draft_id: str):
     for kind in ("poster", "fanart"):
         payload.setdefault(f"{kind}_source", first_source)
         payload.setdefault(f"selected_{kind}_thumb", "")
+    return draft
+
+
+def require_append_draft(draft_id: str):
+    draft = get_draft(draft_id)
+    if not draft or draft.get("payload", {}).get("kind") != "append":
+        raise HTTPException(status_code=404, detail="增量追加草稿不存在")
     return draft
 
 
@@ -155,6 +175,148 @@ def browse(request: Request, path: str = ""):
     except (MediaPathError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return render(request, "browse.html", **data)
+
+
+@app.get("/collections", response_class=HTMLResponse)
+def collections_page(request: Request):
+    return render(request, "collections.html", collections=list_collections())
+
+
+@app.get("/collection", response_class=HTMLResponse)
+def collection_detail(request: Request, path: str):
+    try:
+        collection = load_collection(path)
+    except (CollectionError, MediaPathError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return render(request, "collection_detail.html", collection=collection)
+
+
+@app.post("/collection/update")
+async def collection_update(request: Request):
+    form = await request.form()
+    path = str(form.get("path", ""))
+    try:
+        operations = update_collection_metadata(
+            path,
+            title=str(form.get("title", "")),
+            plot=str(form.get("plot", "")),
+            year=str(form.get("year", "")),
+            genres=str(form.get("genres", "")),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"更新集合信息失败：{exc}") from exc
+    task_id = uuid.uuid4().hex[:12]
+    create_task(task_id, f"更新集合信息：{path}", operations, "success")
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+
+@app.post("/collection/episode/update")
+async def collection_episode_update(request: Request):
+    form = await request.form()
+    path = str(form.get("path", ""))
+    video = str(form.get("video", ""))
+    try:
+        operations = update_episode_metadata(
+            path,
+            video,
+            title=str(form.get("title", "")),
+            plot=str(form.get("plot", "")),
+            aired=str(form.get("aired", "")),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"更新单集信息失败：{exc}") from exc
+    task_id = uuid.uuid4().hex[:12]
+    create_task(task_id, f"更新单集信息：{Path(video).name}", operations, "success")
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+
+@app.post("/collection/repair")
+async def collection_repair(request: Request):
+    form = await request.form()
+    path = str(form.get("path", ""))
+    try:
+        operations = repair_collection(
+            path,
+            repair_tvshow=str(form.get("repair_tvshow", "0")) == "1",
+            repair_episode_nfo=str(form.get("repair_episode_nfo", "0")) == "1",
+            repair_episode_thumbs=str(form.get("repair_episode_thumbs", "0")) == "1",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"修复集合失败：{exc}") from exc
+    task_id = uuid.uuid4().hex[:12]
+    create_task(task_id, f"修复集合完整性：{path}", operations, "success")
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+
+@app.get("/collection/add", response_class=HTMLResponse)
+def collection_add_page(request: Request, collection: str, path: str = ""):
+    try:
+        target = load_collection(collection)
+        data = scan_directory(path)
+    except (CollectionError, MediaPathError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return render(request, "collection_add.html", collection=target, **data)
+
+
+@app.post("/collection/add/create")
+async def collection_add_create(request: Request):
+    form = await request.form()
+    collection = str(form.get("collection", ""))
+    selected = [str(v) for v in form.getlist("selected")]
+    if not selected:
+        return RedirectResponse(f"/collection/add?collection={quote(collection, safe='')}&error=no-selection", status_code=303)
+    try:
+        payload = build_append_payload(collection, selected)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    draft_id = uuid.uuid4().hex[:12]
+    save_draft(draft_id, payload)
+    return RedirectResponse(f"/append/{draft_id}/edit", status_code=303)
+
+
+@app.get("/append/{draft_id}/edit", response_class=HTMLResponse)
+def append_edit(request: Request, draft_id: str):
+    draft = require_append_draft(draft_id)
+    return render(request, "append_edit.html", draft=draft, payload=draft["payload"])
+
+
+@app.post("/append/{draft_id}/save")
+async def append_save(request: Request, draft_id: str):
+    draft = require_append_draft(draft_id)
+    form = await request.form()
+    apply_append_form(draft["payload"], form)
+    save_draft(draft_id, draft["payload"])
+    action = str(form.get("action", "save"))
+    if action == "preview":
+        return RedirectResponse(f"/append/{draft_id}/preview", status_code=303)
+    return RedirectResponse(f"/append/{draft_id}/edit?saved=1", status_code=303)
+
+
+@app.get("/append/{draft_id}/preview", response_class=HTMLResponse)
+def append_preview_page(request: Request, draft_id: str):
+    draft = require_append_draft(draft_id)
+    try:
+        plan = preview_append(draft["payload"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return render(request, "append_preview.html", draft=draft, plan=plan)
+
+
+@app.post("/append/{draft_id}/execute")
+def append_execute(draft_id: str):
+    draft = require_append_draft(draft_id)
+    task_id = uuid.uuid4().hex[:12]
+    collection_path = draft["payload"].get("collection_path", "")
+    create_task(task_id, f"向集合增量追加视频：{collection_path}", [], "running")
+    try:
+        operations = execute_append(draft["payload"])
+        update_task(task_id, status="success", operations=operations)
+        save_draft(draft_id, draft["payload"], status="executed")
+    except (CollectionConflictError, CollectionError) as exc:
+        update_task(task_id, status="failed", error=str(exc))
+    except Exception as exc:
+        update_task(task_id, status="failed", error=str(exc))
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
 
 
 @app.post("/drafts/create")
