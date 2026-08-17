@@ -85,7 +85,7 @@ def launch_child() -> subprocess.Popen:
             sys.executable,
             "-m",
             "uvicorn",
-            "app.main:app",
+            "app.runtime_main:app",
             "--host",
             HOST,
             "--port",
