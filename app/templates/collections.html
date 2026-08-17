@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}已整理集合 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">COLLECTION LIBRARY</div><h1>已整理集合</h1></div>
+  <a class="btn ghost" href="/browse">继续整理新视频</a>
+</div>
+<section class="card flush">
+  <div class="toolbar"><span class="muted">自动扫描媒体目录中带 tvshow.nfo 或 SxxExx 视频的集合。</span><strong>{{ collections|length }} 个集合</strong></div>
+  <div class="collection-list">
+  {% for item in collections %}
+    <a class="collection-row" href="/collection?path={{ item.path|urlquote }}">
+      <div class="collection-cover {% if not item.poster_exists %}empty-cover{% endif %}">
+        {% if item.poster_exists %}<span>POSTER</span>{% else %}<span>无海报</span>{% endif %}
+      </div>
+      <div class="collection-main">
+        <strong>{{ item.title }}</strong>
+        <small>{{ item.path }}</small>
+        <span>{{ item.episode_count }} 个视频{% if item.year %} · {{ item.year }}{% endif %}{% if item.genres %} · {{ item.genres }}{% endif %}</span>
+      </div>
+      <div class="collection-health {% if item.issue_count %}warn{% else %}ok{% endif %}">
+        {% if item.issue_count %}{{ item.issue_count }} 个问题{% else %}完整{% endif %}
+      </div>
+    </a>
+  {% else %}
+    <div class="empty">还没有发现已整理集合。先从“媒体文件”创建一个集合。</div>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}
