@@ -15,7 +15,7 @@
     {% if drafts %}
       <div class="list">
       {% for item in drafts %}
-        <a class="list-row" href="/drafts/{{ item.id }}/edit">
+        <a class="list-row" href="{{ item.edit_url }}">
           <span><strong>{{ item.series_title }}</strong><small>{{ item.episode_count }} 个视频 · {{ item.updated_at }}</small></span>
           <span class="badge">{{ item.status }}</span>
         </a>
