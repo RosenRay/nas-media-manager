@@ -1,0 +1,7 @@
+/* v0.1.7 lightweight updater */
+@media (max-width:800px){
+  .mobile-bottom-nav{grid-template-columns:repeat(4,1fr)}
+  .list-row.padded{gap:10px;align-items:center}
+  .list-row.padded form{margin:0;flex:0 0 auto}
+  .list-row.padded .btn{min-width:72px}
+}
