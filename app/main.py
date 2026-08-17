@@ -13,6 +13,12 @@ from starlette.datastructures import UploadFile
 
 from app.config import MEDIA_ROOT, THUMB_ROOT, UPLOAD_ROOT, ensure_runtime_dirs
 from app.core.media import MediaPathError, default_draft, scan_directory
+from app.core.batch import (
+    BatchFolderError,
+    build_batch_payload,
+    execute_batch_payload,
+    preview_batch_payload,
+)
 from app.core.collections import (
     CollectionConflictError,
     CollectionError,
@@ -48,7 +54,7 @@ async def lifespan(app: FastAPI):
 
 
 ensure_runtime_dirs()
-app = FastAPI(title="NAS Media Manager", version="0.1.4", lifespan=lifespan)
+app = FastAPI(title="NAS Media Manager", version="0.1.5", lifespan=lifespan)
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/thumb-cache", StaticFiles(directory=THUMB_ROOT), name="thumb-cache")
@@ -90,6 +96,13 @@ def require_append_draft(draft_id: str):
     draft = get_draft(draft_id)
     if not draft or draft.get("payload", {}).get("kind") != "append":
         raise HTTPException(status_code=404, detail="增量追加草稿不存在")
+    return draft
+
+
+def require_batch_draft(draft_id: str):
+    draft = get_draft(draft_id)
+    if not draft or draft.get("payload", {}).get("kind") != "batch_folders":
+        raise HTTPException(status_code=404, detail="批量集合草稿不存在")
     return draft
 
 
@@ -175,6 +188,50 @@ def browse(request: Request, path: str = ""):
     except (MediaPathError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return render(request, "browse.html", **data)
+
+
+@app.post("/batch/folders/create")
+async def batch_folders_create(request: Request):
+    form = await request.form()
+    selected = [str(v) for v in form.getlist("selected_folder")]
+    if not selected:
+        return RedirectResponse("/browse?error=no-folder-selection", status_code=303)
+    try:
+        payload = build_batch_payload(selected)
+    except BatchFolderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    draft_id = uuid.uuid4().hex[:12]
+    save_draft(draft_id, payload)
+    return RedirectResponse(f"/batch/{draft_id}/preview", status_code=303)
+
+
+@app.get("/batch/{draft_id}/preview", response_class=HTMLResponse)
+def batch_preview_page(request: Request, draft_id: str):
+    draft = require_batch_draft(draft_id)
+    try:
+        plan = preview_batch_payload(draft["payload"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return render(request, "batch_preview.html", draft=draft, plan=plan)
+
+
+@app.post("/batch/{draft_id}/execute")
+def batch_execute(draft_id: str):
+    draft = require_batch_draft(draft_id)
+    task_id = uuid.uuid4().hex[:12]
+    item_count = len(draft["payload"].get("items", []))
+    skipped_count = len(draft["payload"].get("skipped", []))
+    summary = f"批量生成视频集合：{item_count} 个"
+    if skipped_count:
+        summary += f"（过滤 {skipped_count} 个目录）"
+    create_task(task_id, summary, [], "running")
+    try:
+        operations = execute_batch_payload(draft["payload"], draft_id)
+        update_task(task_id, status="success", operations=operations)
+        save_draft(draft_id, draft["payload"], status="executed")
+    except Exception as exc:
+        update_task(task_id, status="failed", error=str(exc))
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
 
 
 @app.get("/collections", response_class=HTMLResponse)
