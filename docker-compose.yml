@@ -1,0 +1,15 @@
+services:
+  nas-media-manager:
+    build: .
+    container_name: nas-media-manager
+    restart: unless-stopped
+    ports:
+      - "18765:8000"
+    environment:
+      MEDIA_ROOT: /media
+      DATA_ROOT: /data
+    volumes:
+      # 修改左侧路径为你绿联 NAS 上希望管理的视频目录。
+      - /volume1/video:/media
+      # 持久化 SQLite、草稿图片与缩略图缓存。
+      - ./data:/data
