@@ -2,13 +2,15 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f8">
   <title>{% block title %}NAS 媒体整理器{% endblock %}</title>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/mobile.css">
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/">NAS 媒体整理器 <span>v0.1.4</span></a>
+  <a class="brand" href="/">NAS 媒体整理器 <span>v0.1.6</span></a>
   <nav>
     <a href="/browse">媒体文件</a>
     <a href="/collections">已整理集合</a>
@@ -19,5 +21,10 @@
   {% block content %}{% endblock %}
 </main>
 <footer class="footer">媒体根目录：<code>{{ media_root }}</code> · 默认不覆盖任何已有文件</footer>
+<nav class="mobile-bottom-nav" aria-label="手机端主导航">
+  <a href="/browse" class="{% if request.url.path.startswith('/browse') or request.url.path.startswith('/drafts') or request.url.path.startswith('/batch') %}active{% endif %}"><span class="nav-icon">▣</span><span>媒体</span></a>
+  <a href="/collections" class="{% if request.url.path.startswith('/collection') or request.url.path.startswith('/append') %}active{% endif %}"><span class="nav-icon">▤</span><span>集合</span></a>
+  <a href="/tasks" class="{% if request.url.path.startswith('/tasks') %}active{% endif %}"><span class="nav-icon">✓</span><span>任务</span></a>
+</nav>
 </body>
 </html>
