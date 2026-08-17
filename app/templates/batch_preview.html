@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}批量集合预览 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">BATCH COLLECTIONS</div><h1>批量生成集合</h1></div>
+  <a class="btn ghost" href="/browse">返回文件选择</a>
+</div>
+<div class="stats">
+  <div><strong>{{ plan.ready_count }}</strong><span>可生成集合</span></div>
+  <div><strong>{{ plan.skipped|length }}</strong><span>已过滤文件夹</span></div>
+  <div><strong>{{ plan.blocked_count }}</strong><span>当前冲突</span></div>
+</div>
+<div class="alert">每个文件夹对应一个集合，集合名称默认使用文件夹名。批量模式只处理文件夹当前层的视频，子目录不会递归合并。</div>
+{% if plan.skipped %}
+<section class="card">
+  <div class="section-title"><h2>已自动过滤</h2><span class="hint">空目录、无视频目录、已整理集合等不会执行。</span></div>
+  <div class="generated-list">
+    {% for item in plan.skipped %}<div><code>{{ item.name }}</code> · {{ item.reason }}</div>{% endfor %}
+  </div>
+</section>
+{% endif %}
+<section class="card flush">
+  <div class="section-title padded"><h2>待生成集合</h2><span class="hint">底层继续使用绿联兼容的 Season 01 结构。</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>源文件夹</th><th>集合名称</th><th>视频数</th><th>目标目录</th><th>状态</th></tr></thead>
+      <tbody>
+      {% for item in plan["items"] %}
+        <tr>
+          <td>{{ item.folder }}</td>
+          <td>{{ item.series_title }}</td>
+          <td>{{ item.video_count }}</td>
+          <td>{{ item.collection_dir }}</td>
+          <td>{% if item.conflicts %}<span class="danger-text">冲突：{{ item.conflicts|join('；') }}</span>{% else %}可执行{% endif %}</td>
+        </tr>
+      {% else %}<tr><td colspan="5" class="empty">没有可生成的集合。</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<div class="sticky-actions">
+  <a class="btn ghost" href="/browse">返回文件选择</a>
+  <form method="post" action="/batch/{{ draft.id }}/execute">
+    <button class="btn primary" type="submit" {% if plan.ready_count == 0 or plan.blocked_count > 0 %}disabled{% endif %}>确认批量生成 {{ plan.ready_count }} 个集合</button>
+  </form>
+</div>
+{% endblock %}
