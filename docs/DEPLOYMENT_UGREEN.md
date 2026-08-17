@@ -1,30 +1,21 @@
 # 绿联 NAS Docker 部署
 
-## 1. 准备项目目录
-
-将仓库克隆或下载到绿联 NAS 的 Docker 项目目录，例如：
+从 v0.1.5 开始，推荐使用 GitHub Container Registry（GHCR）镜像部署。GitHub `main` 分支代码通过自动测试后，会自动构建 `linux/amd64` 和 `linux/arm64` 镜像并推送到：
 
 ```text
-Docker/nas-media-manager/
+ghcr.io/rosenray/nas-media-manager
 ```
 
-确保项目根目录直接包含：
+这样 NAS 不再需要保存完整源码，也不需要每次重新构建镜像。
 
-```text
-Dockerfile
-docker-compose.yml
-requirements.txt
-app/
-```
+## 1. 推荐 Compose
 
-## 2. 修改媒体目录映射
-
-编辑 `docker-compose.yml`：
+在绿联 NAS 的 Docker 项目目录保存下面的 `docker-compose.yml`：
 
 ```yaml
 services:
   nas-media-manager:
-    build: .
+    image: ghcr.io/rosenray/nas-media-manager:latest
     container_name: nas-media-manager
     restart: unless-stopped
     ports:
@@ -37,28 +28,17 @@ services:
       - ./data:/data
 ```
 
-重点：
+只修改左侧 `/你的NAS真实视频目录`，右侧 `/media` 和 `/data` 保持不变。
 
-- 左侧 `/你的NAS真实视频目录` 必须替换成绿联 NAS 上实际存在的视频目录。
-- 右侧 `/media` 保持不变。
-- `/data` 用于 SQLite、上传图片和缩略图缓存。
-- 媒体目录需要可写权限，因为程序会执行重命名、移动、创建 NFO 和图片。
+`./data:/data` 会保存 SQLite、任务记录、草稿图片和缩略图缓存。更新 Docker 镜像时不要删除这个目录。
 
-## 3. 在绿联 Docker 创建项目
+## 2. 第一次部署
 
-在 UGOS Pro：
+在 UGOS Pro Docker 中创建项目并使用上面的 Compose，然后拉取并启动镜像。
 
-1. 打开 Docker。
-2. 进入“项目”。
-3. 创建项目并选择本仓库所在目录。
-4. 确认 Compose 内容。
-5. 执行构建并启动。
+如果 NAS 提示无法拉取 `ghcr.io/rosenray/nas-media-manager:latest`，先确认 GitHub Container Registry 中 `nas-media-manager` 包允许当前 NAS 拉取。对于公开仓库，建议将容器包设置为 Public，这样 NAS 无需额外登录 GHCR。
 
-第一次会安装 Python 依赖和 FFmpeg，需要能够访问对应软件源。
-
-## 4. 访问
-
-默认端口：
+启动后访问：
 
 ```text
 http://NAS-IP:18765
@@ -70,51 +50,103 @@ http://NAS-IP:18765
 http://NAS-IP:18765/health
 ```
 
-正常返回示例：
+正常返回类似：
 
 ```json
 {"status":"ok","media_root":"/media"}
 ```
 
-## 5. 确认媒体目录映射
+## 3. 以后更新版本
 
-如果页面目录为空，优先进入容器终端检查：
+后续代码提交到 `main` 后，GitHub Actions 会先运行测试。测试通过后自动构建并推送新镜像。
+
+### 绿联 Docker 界面
+
+以后只需要在 Docker 中更新 / 重新拉取 `nas-media-manager` 镜像，然后重新创建或启动容器即可，不需要重新上传源码。
+
+### 命令行更新
+
+如果在 NAS 主机终端使用 Docker Compose：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+也可以：
+
+```bash
+docker compose up -d --pull always
+```
+
+## 4. 版本回退
+
+默认使用：
+
+```yaml
+image: ghcr.io/rosenray/nas-media-manager:latest
+```
+
+如果新版有问题，可以临时指定版本，例如：
+
+```yaml
+image: ghcr.io/rosenray/nas-media-manager:0.1.5
+```
+
+然后重新拉取和启动：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+程序数据仍保存在 `/data` 挂载目录中。
+
+## 5. 镜像标签
+
+每次 `main` 发布会生成：
+
+```text
+latest
+VERSION 文件中的版本号，例如 0.1.5
+```
+
+因此：
+
+```text
+ghcr.io/rosenray/nas-media-manager:latest
+ghcr.io/rosenray/nas-media-manager:0.1.5
+```
+
+都会指向对应构建结果。
+
+## 6. CPU 架构
+
+自动构建同时支持：
+
+```text
+linux/amd64
+linux/arm64
+```
+
+Docker 会根据 NAS CPU 架构自动选择对应镜像。
+
+## 7. 确认媒体目录映射
+
+如果网页能打开但媒体目录为空，进入容器终端检查：
 
 ```bash
 ls -lah /media
 ```
 
-如果 `/media` 为空，通常意味着 Compose 左侧 NAS 路径填写错误，而不是程序扫描失败。
+如果 `/media` 为空，优先检查 Compose 左侧 NAS 路径是否正确。
 
-## 6. 首次使用建议
+## 8. 本地源码构建
 
-不要一开始映射整个正式媒体库。先建立测试目录：
+仓库仍保留 `Dockerfile`，开发调试时可以使用：
 
-```text
-MediaManager-Test/
-├── test01.mp4
-├── test02.mp4
-└── test03.mp4
+```bash
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
-验证完整流程：
-
-```text
-扫描
-→ 创建集合
-→ 编辑元数据
-→ 生成海报/背景图/单集图
-→ 预览
-→ 执行
-→ 绿联影视中心重新扫描
-→ 确认归组
-→ 测试撤销
-```
-
-确认无误后再扩大媒体目录范围。
-
-## 7. 更新版本
-
-建议每个版本使用独立项目目录，并保留旧版本 `data/` 的备份。
-
-更新后要重新构建镜像，而不是只重启旧容器，否则 Docker 可能继续运行旧镜像中的源码。
+日常 NAS 部署不再需要这一方式。
