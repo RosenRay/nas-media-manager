@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}追加预览 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">APPEND PREVIEW</div><h1>确认增量追加</h1></div><a class="btn ghost" href="/append/{{ draft.id }}/edit">返回修改</a></div>
+{% if plan.conflicts %}<div class="alert danger"><strong>存在冲突，暂时不能执行：</strong><ul>{% for item in plan.conflicts %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
+<div class="stats"><div><strong>{{ plan["items"]|length }}</strong><span>新增视频</span></div><div><strong>{{ plan.collection.episode_count }}</strong><span>原有单集</span></div><div><strong>{% if plan.auto_episode_thumbs %}是{% else %}否{% endif %}</strong><span>自动单集封面</span></div></div>
+<section class="card">
+  <div class="section-title"><h2>文件变更</h2><span class="hint">只追加新集，不修改现有 Episode。</span></div>
+  <div class="changes">{% for item in plan["items"] %}<div class="change"><span class="old">{{ item.source }}</span><span class="arrow">→</span><span class="new">{{ item.target }}</span></div>{% endfor %}</div>
+</section>
+<section class="card">
+  <div class="section-title"><h2>新增媒资</h2></div>
+  <div class="generated-list">{% for item in plan["items"] %}<code>{{ item.nfo }}</code>{% if plan.auto_episode_thumbs %}<code>{{ item.thumb }}</code>{% endif %}{% endfor %}</div>
+</section>
+<div class="sticky-actions"><a class="btn ghost" href="/append/{{ draft.id }}/edit">返回修改</a><form method="post" action="/append/{{ draft.id }}/execute"><button class="btn primary" type="submit" {% if plan.conflicts %}disabled{% endif %}>确认追加</button></form></div>
+{% endblock %}
