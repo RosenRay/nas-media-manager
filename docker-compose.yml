@@ -1,6 +1,6 @@
 services:
   nas-media-manager:
-    build: .
+    image: ghcr.io/rosenray/nas-media-manager:latest
     container_name: nas-media-manager
     restart: unless-stopped
     ports:
