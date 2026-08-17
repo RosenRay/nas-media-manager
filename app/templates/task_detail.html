@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}任务详情 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">TASK {{ task.id }}</div><h1>{{ task.summary }}</h1></div><span class="badge {{ task.status }} large">{{ task.status }}</span></div>
+{% if task.error %}<div class="alert danger"><strong>错误：</strong>{{ task.error }}</div>{% endif %}
+<section class="card">
+  <div class="section-title"><h2>执行操作</h2><span>{{ task.created_at }}</span></div>
+  <div class="operations">
+  {% for op in task.operations %}<pre>{{ op }}</pre>{% else %}<div class="empty">没有成功写入的操作。</div>{% endfor %}
+  </div>
+</section>
+{% if task.status == 'success' %}
+{% if '（绿联兼容）' in task.summary %}<div class="alert success"><strong>下一步：绿联扫描验证。</strong> 请在绿联影视中心重新扫描该集合所在媒体目录，确认 S01E01、S01E02、S01E03… 是否全部归入同一个集合。若仍有拆分，请保留本次生成后的目录截图和对应 NFO。</div>{% endif %}
+<div class="alert warning">撤销会删除本任务生成且未被修改的 NFO/图片，并把视频移动回原位置；如果目标文件后来发生变化，系统会拒绝删除。</div>
+<form method="post" action="/tasks/{{ task.id }}/undo"><button class="btn danger-btn" type="submit">撤销本次整理</button></form>
+{% elif task.status == 'undone' %}<div class="alert success">本次整理已经撤销。</div>{% endif %}
+{% endblock %}
