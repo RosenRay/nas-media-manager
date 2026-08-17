@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}编排新增视频 · NAS 媒体整理器{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">APPEND DRAFT {{ draft.id }}</div><h1>编排新增视频</h1><div class="muted">目标集合：{{ payload.series_title }}</div></div>
+  <a class="btn ghost" href="/collection?path={{ payload.collection_path|urlquote }}">返回集合</a>
+</div>
+{% if request.query_params.get('saved') %}<div class="alert success">增量草稿已保存。</div>{% endif %}
+<form method="post" action="/append/{{ draft.id }}/save">
+<section class="card compact-card">
+  <label class="option-check"><input type="checkbox" name="auto_episode_thumbs" value="1" {% if payload.auto_episode_thumbs %}checked{% endif %}> <span><strong>自动生成新增单集封面</strong><small>没有手工封面流程时，执行阶段从每个新增视频约 50% 位置自动截取 JPG。</small></span></label>
+</section>
+{% for ep in payload.episodes %}
+{% set idx=loop.index0 %}
+<section class="card episode">
+  <div class="episode-head"><div><span class="episode-no">E{{ "%02d"|format(ep.episode) }}</span><strong>{{ ep.source }}</strong></div><span class="muted">{{ ep.duration_text }} · {{ ep.resolution }}</span></div>
+  <div class="form-grid ep-grid">
+    <label>标题<input name="title_{{ idx }}" value="{{ ep.title }}" required></label>
+    <label>日期<input name="aired_{{ idx }}" value="{{ ep.aired }}" placeholder="2026-08-17"></label>
+    <label class="span-all">简介<textarea name="plot_{{ idx }}" rows="2">{{ ep.plot }}</textarea></label>
+  </div>
+</section>
+{% endfor %}
+<div class="sticky-actions"><button class="btn ghost" name="action" value="save" type="submit">保存草稿</button><button class="btn primary" name="action" value="preview" type="submit">预览追加方案</button></div>
+</form>
+{% endblock %}
