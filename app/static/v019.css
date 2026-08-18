@@ -1,0 +1,24 @@
+/* v0.1.9 artwork preview refinements */
+
+/* Poster candidates are 2:3 artwork and should never be previewed in a 16:9
+   card. :has() is already used by the existing UI and lets us target the
+   poster panel without coupling the template to loop position. */
+.artwork-panel:has(input[name="poster"]) .thumb-card{
+  aspect-ratio:2/3;
+  background:var(--soft);
+}
+.artwork-panel:has(input[name="poster"]) .thumb-card img{
+  object-fit:contain;
+}
+.artwork-panel:has(input[name="poster"]) .thumbs{
+  align-items:flex-start;
+}
+
+@media (max-width:800px){
+  /* A 72vw-wide 2:3 poster becomes unnecessarily tall on phones. Keep the
+     horizontal swipe interaction but size poster cards like real poster tiles. */
+  .artwork-panel:has(input[name="poster"]) .thumb-card{
+    flex:0 0 min(52vw,190px);
+    min-height:0;
+  }
+}
