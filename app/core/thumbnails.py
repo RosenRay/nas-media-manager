@@ -124,10 +124,16 @@ def save_uploaded_artwork(draft_id: str, kind: str, filename: str, content: byte
     temp.write_bytes(content)
     output = target_dir / f"{kind}.jpg"
     try:
-        # Uploaded images are normalized with the same no-crop composition rule.
-        # Correctly proportioned uploads remain almost unchanged; mismatched
-        # images gain the same blurred, feathered fill instead of being cropped.
-        _render_artwork(temp, output, kind)
+        # Manual artwork is user-authored content. Keep its composition intact
+        # and only normalize the file format instead of applying auto framing.
+        subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-i", str(temp), "-frames:v", "1", "-q:v", "2", str(output),
+            ],
+            check=True,
+            timeout=20,
+        )
     finally:
         temp.unlink(missing_ok=True)
     return str(output)
