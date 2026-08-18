@@ -16,6 +16,34 @@ ARTWORK_SPECS: dict[str, tuple[int, int]] = {
     "episode": (1280, 720),
 }
 
+# Internal blend presets. v0.1.9 intentionally defaults to the stronger profile
+# after real-media review showed that the previous narrow feather still left a
+# visible rectangular foreground boundary on portrait material.
+BLEND_PROFILES: dict[str, dict[str, float]] = {
+    "standard": {
+        "feather_ratio": 0.05,
+        "blur_ratio": 0.045,
+        "fade_power": 1.0,
+        "brightness": -0.08,
+        "saturation": 0.88,
+    },
+    "soft": {
+        "feather_ratio": 0.09,
+        "blur_ratio": 0.055,
+        "fade_power": 1.18,
+        "brightness": -0.10,
+        "saturation": 0.83,
+    },
+    "strong": {
+        "feather_ratio": 0.14,
+        "blur_ratio": 0.065,
+        "fade_power": 1.35,
+        "brightness": -0.12,
+        "saturation": 0.78,
+    },
+}
+DEFAULT_BLEND_PROFILE = "strong"
+
 
 def artwork_spec(kind: str) -> tuple[int, int]:
     try:
@@ -24,34 +52,46 @@ def artwork_spec(kind: str) -> tuple[int, int]:
         raise ValueError("不支持的图片类型") from exc
 
 
-def _composition_filter(kind: str) -> str:
-    """Build a no-crop artwork filter with soft transitions only where needed.
+def _blend_profile(name: str) -> dict[str, float]:
+    try:
+        return BLEND_PROFILES[name]
+    except KeyError as exc:
+        raise ValueError("不支持的融合强度") from exc
+
+
+def _composition_filter(kind: str, blend_profile: str = DEFAULT_BLEND_PROFILE) -> str:
+    """Build a no-crop artwork filter with a broad, soft foreground blend.
 
     Background layer:
       - fills the target canvas by cropping only the decorative blurred copy;
-      - is heavily blurred, slightly darkened and slightly desaturated.
+      - is strongly blurred, darkened and desaturated so it does not compete
+        with the complete foreground frame.
 
     Foreground layer:
       - uses force_original_aspect_ratio=decrease, so the source frame remains
         fully visible for portrait, 4:3, 16:9 and ultrawide videos;
-      - feathers only edges next to an actually padded axis. Portrait / 4:3
-        frames fade softly at the left and right edges, ultrawide frames at the
-        top and bottom edges, while a native target-ratio frame stays opaque.
+      - feathers only edges next to an actually padded axis;
+      - uses a wider, curved alpha transition so the foreground blends into the
+        same-frame background instead of looking like a hard rectangle.
     """
     width, height = artwork_spec(kind)
+    profile = _blend_profile(blend_profile)
     shortest = min(width, height)
-    blur_sigma = max(18, round(shortest * 0.04))
-    feather = max(12, round(shortest * 0.025))
+    blur_sigma = max(18, round(shortest * profile["blur_ratio"]))
+    feather = max(18, round(shortest * profile["feather_ratio"]))
+    fade_power = profile["fade_power"]
 
     # Allow a 1px scale-rounding tolerance so native-ratio artwork does not get
     # an unnecessary blurred rim. W/H here are the scaled foreground dimensions.
+    # pow(..., >1) keeps more of the broad transition semi-transparent, which
+    # visually removes the old hard edge without cropping the source frame.
     x_fade = (
         f"if(lt(W,{width - 2}),"
-        f"max(0,min(1,min(X/{feather},(W-1-X)/{feather}))),1)"
+        f"pow(max(0,min(1,min(X/{feather},(W-1-X)/{feather}))),{fade_power}),1)"
     )
     y_fade = (
         f"if(lt(H,{height - 2}),"
-        f"max(0,min(1,min(Y/{feather},(H-1-Y)/{feather}))),1)"
+        f"pow(max(0,min(1,min(Y/{feather},(H-1-Y)/{feather}))),{fade_power}),1)"
     )
     alpha = f"255*min({x_fade},{y_fade})"
 
@@ -59,7 +99,7 @@ def _composition_filter(kind: str) -> str:
         "[0:v]split=2[bgsrc][fgsrc];"
         f"[bgsrc]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={width}:{height},gblur=sigma={blur_sigma}:steps=2,"
-        "eq=brightness=-0.08:saturation=0.88[bg];"
+        f"eq=brightness={profile['brightness']}:saturation={profile['saturation']}[bg];"
         f"[fgsrc]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,"
         "format=rgba,"
         f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{alpha}'[fg];"
@@ -67,7 +107,14 @@ def _composition_filter(kind: str) -> str:
     )
 
 
-def _render_artwork(source: Path, target: Path, kind: str, *, at: float | None = None) -> Path:
+def _render_artwork(
+    source: Path,
+    target: Path,
+    kind: str,
+    *,
+    at: float | None = None,
+    blend_profile: str = DEFAULT_BLEND_PROFILE,
+) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     if at is not None:
@@ -75,7 +122,7 @@ def _render_artwork(source: Path, target: Path, kind: str, *, at: float | None =
     command += [
         "-i", str(source),
         "-frames:v", "1",
-        "-filter_complex", _composition_filter(kind),
+        "-filter_complex", _composition_filter(kind, blend_profile),
         "-map", "[out]",
         "-q:v", "2",
         str(target),

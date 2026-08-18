@@ -38,6 +38,17 @@ def test_mobile_thumbnails_are_horizontal_scroll_strip():
     assert '.thumb-card{flex:0 0 min(76vw,280px)' in css
 
 
+def test_poster_preview_uses_portrait_two_by_three_cards():
+    base = read("app/templates/base.html")
+    css = read("app/static/v019.css")
+    draft = read("app/templates/draft_edit.html")
+    assert '/static/v019.css' in base
+    assert 'input[name="poster"]' in css
+    assert 'aspect-ratio:2/3' in css
+    assert 'flex:0 0 min(52vw,190px)' in css
+    assert 'name="{{ kind }}"' in draft
+
+
 def test_batch_preview_has_mobile_labels():
     preview = read("app/templates/batch_preview.html")
     assert 'mobile-preview-table' in preview

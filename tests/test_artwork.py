@@ -2,11 +2,15 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 # Keep the same process-wide roots used by the existing test suite.
 os.environ['MEDIA_ROOT'] = '/tmp/nmm-v013-tests/media'
 os.environ['DATA_ROOT'] = '/tmp/nmm-v013-tests/data'
 
 from app.core.thumbnails import (
+    BLEND_PROFILES,
+    DEFAULT_BLEND_PROFILE,
     _composition_filter,
     _render_artwork,
     artwork_spec,
@@ -38,19 +42,42 @@ def test_artwork_specs_match_media_center_shapes():
     assert artwork_spec('episode') == (1280, 720)
 
 
-def test_filter_keeps_foreground_full_and_feathers_only_padded_axes():
+def test_strong_blend_is_default_and_has_broader_transition():
+    assert DEFAULT_BLEND_PROFILE == 'strong'
+    assert set(BLEND_PROFILES) == {'standard', 'soft', 'strong'}
+    assert BLEND_PROFILES['standard']['feather_ratio'] < BLEND_PROFILES['soft']['feather_ratio']
+    assert BLEND_PROFILES['soft']['feather_ratio'] < BLEND_PROFILES['strong']['feather_ratio']
+    assert BLEND_PROFILES['strong']['blur_ratio'] > BLEND_PROFILES['standard']['blur_ratio']
+
+
+def test_filter_keeps_foreground_full_and_uses_broad_curved_blend():
     value = _composition_filter('episode')
     # The decorative background may crop to fill, but the actual foreground
     # must always shrink-to-fit and keep the complete source frame.
     assert 'force_original_aspect_ratio=increase' in value
     assert 'force_original_aspect_ratio=decrease' in value
-    assert 'gblur=' in value
+    assert 'gblur=sigma=47' in value
     assert "geq=r='r(X,Y)'" in value
     # X/Y feathering is conditional on the scaled foreground actually being
     # narrower/shorter than the target. Native 16:9 therefore stays opaque.
     assert 'if(lt(W,1278)' in value
     assert 'if(lt(H,718)' in value
+    # Strong mode expands the 720px canvas feather to roughly 14% (101px)
+    # and uses a curved transition instead of the old narrow linear ramp.
+    assert 'X/101' in value
+    assert 'Y/101' in value
+    assert 'pow(max(0,min(1' in value
     assert "a='255*min(" in value
+    assert 'eq=brightness=-0.12:saturation=0.78' in value
+
+
+def test_blend_profile_can_be_lowered_internally():
+    standard = _composition_filter('episode', 'standard')
+    strong = _composition_filter('episode', 'strong')
+    assert 'X/36' in standard
+    assert 'X/101' in strong
+    with pytest.raises(ValueError, match='融合强度'):
+        _composition_filter('episode', 'unknown')
 
 
 def test_portrait_episode_thumbnail_is_fixed_16_9_without_source_crop(tmp_path):
