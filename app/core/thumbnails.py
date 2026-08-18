@@ -25,7 +25,7 @@ def artwork_spec(kind: str) -> tuple[int, int]:
 
 
 def _composition_filter(kind: str) -> str:
-    """Build a no-crop artwork filter with a soft blended edge.
+    """Build a no-crop artwork filter with soft transitions only where needed.
 
     Background layer:
       - fills the target canvas by cropping only the decorative blurred copy;
@@ -34,19 +34,27 @@ def _composition_filter(kind: str) -> str:
     Foreground layer:
       - uses force_original_aspect_ratio=decrease, so the source frame remains
         fully visible for portrait, 4:3, 16:9 and ultrawide videos;
-      - receives a short alpha feather on all four edges before being centered
-        over the blurred background, avoiding an abrupt hard rectangle.
+      - feathers only edges next to an actually padded axis. Portrait / 4:3
+        frames fade softly at the left and right edges, ultrawide frames at the
+        top and bottom edges, while a native target-ratio frame stays opaque.
     """
     width, height = artwork_spec(kind)
     shortest = min(width, height)
     blur_sigma = max(18, round(shortest * 0.04))
     feather = max(12, round(shortest * 0.025))
-    alpha = (
-        "255*max(0,min(1,min("
-        f"min(X/{feather},(W-1-X)/{feather}),"
-        f"min(Y/{feather},(H-1-Y)/{feather})"
-        ")))"
+
+    # Allow a 1px scale-rounding tolerance so native-ratio artwork does not get
+    # an unnecessary blurred rim. W/H here are the scaled foreground dimensions.
+    x_fade = (
+        f"if(lt(W,{width - 2}),"
+        f"max(0,min(1,min(X/{feather},(W-1-X)/{feather}))),1)"
     )
+    y_fade = (
+        f"if(lt(H,{height - 2}),"
+        f"max(0,min(1,min(Y/{feather},(H-1-Y)/{feather}))),1)"
+    )
+    alpha = f"255*min({x_fade},{y_fade})"
+
     return (
         "[0:v]split=2[bgsrc][fgsrc];"
         f"[bgsrc]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
